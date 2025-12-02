@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Registro de Datos por Líder</title>
+
+<!-- IMPORTAR jsPDF REAL -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f2f2f2;
+    padding: 20px;
+}
+.container {
+    max-width: 800px;
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+h2 { text-align: center; }
+label { display: block; margin-top: 10px; font-weight: bold; }
+
+input, select, textarea {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+}
+
+.row { display: flex; gap: 8px; }
+.row input { width: 100%; }
+
+.actions { display:flex; gap:10px; margin-top:12px; }
+
+.btn {
+    padding: 10px 14px;
+    background: #222;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+}
+.btn.secondary { background:#555; }
+.btn.positive { background:#0b7a3b; }
+.btn.danger { background:#b00020; }
+
+.btn:hover { opacity:0.95; }
+
+.hidden { display: none !important; }
+
+.top-info { margin-bottom: 10px; font-weight: bold; }
+.error { color: #b00020; font-size: 0.9em; }
+
+.records-card {
+    border:1px solid #e0e0e0;
+    padding:10px;
+    border-radius:8px;
+    margin-bottom:10px;
+    background:#fafafa;
+}
+</style>
+</head>
+
+<body>
+
+<!-- -------------------------------------------------------- -->
+<!--  PANTALLA DE INGRESO DE LÍDER -->
+<!-- -------------------------------------------------------- -->
+<div class="container" id="ingresoLider">
+
+    <h2>Ingreso de Líder</h2>
+
+    <label for="lider">Ingrese el nombre del líder:</label>
+    <input type="text" id="lider" placeholder="Nombre del líder" />
+
+    <div class="actions">
+        <button id="btnContinuar" class="btn">Continuar</button>
+    </div>
+
+    <hr>
+
+    <label for="liderExport">Exportar registros por líder (PDF)</label>
+    <div class="row">
+        <input type="text" id="liderExport" placeholder="Ej: Carlos Pérez" />
+        <button id="btnExportarPDF" class="btn positive" style="width:170px;">Exportar PDF</button>
+    </div>
+
+    <hr>
+
+    <button id="btnLimpiarRegistros" class="btn danger" style="width:100%; margin-top:15px;">
+        🧹 Limpiar registros
+    </button>
+</div>
+
+<!-- -------------------------------------------------------- -->
+<!--  FORMULARIO DE CAPTURA -->
+<!-- -------------------------------------------------------- -->
+<div class="container hidden" id="formularioDatos">
+
+    <div class="top-info">Registro de Datos - Líder: <span id="liderNombre"></span></div>
+
+    <label>Nombres</label>
+    <input type="text" id="nombres" />
+
+    <label>Apellidos</label>
+    <input type="text" id="apellidos" />
+
+    <label>Cédula</label>
+    <input type="text" id="cedula" />
+
+    <label>Fecha de Expedición</label>
+    <input type="date" id="fechaExpedicion" min="1900-01-01" max="2025-12-31" />
+    <div id="errorFecha" class="error" style="display:none"></div>
+
+    <label>Teléfono</label>
+    <input type="text" id="telefono" />
+
+    <label>Dirección</label>
+    <input type="text" id="direccion" />
+
+    <label>Barrio</label>
+    <input type="text" id="barrio" />
+
+    <label>Municipio</label>
+    <input type="text" id="municipio" />
+
+    <div class="actions">
+        <button id="btnGuardar" class="btn">Guardar Registro</button>
+        <button id="btnRegresar" class="btn secondary">Regresar</button>
+    </div>
+</div>
+
+<!-- -------------------------------------------------------- -->
+<!-- MODAL ÉXITO -->
+<!-- -------------------------------------------------------- -->
+<div id="modalExito" class="hidden" style="
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.6); display:flex; justify-content:center; align-items:center;">
+    <div style="background:white; padding:20px; border-radius:10px; width:380px; text-align:center;">
+        <h3>Registro exitoso</h3>
+        <button id="optNuevo" class="btn" style="margin-top:10px;">Nuevo registro</button>
+        <button id="optVer" class="btn secondary" style="margin-top:10px;">Ver registros</button>
+        <button id="optFinalizar" class="btn" style="margin-top:10px; background:#c62828;">Regresar</button>
+    </div>
+</div>
+
+<!-- -------------------------------------------------------- -->
+<!-- MODAL REGISTROS -->
+<!-- -------------------------------------------------------- -->
+<div id="modalRegistros" class="hidden" style="
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.6); display:flex; justify-content:center; align-items:center;">
+    <div style="background:white; padding:15px; border-radius:10px; width:420px; max-height:80vh; overflow:auto;">
+        <h3>Registros guardados</h3>
+        <div id="listaRegistros"></div>
+        <button id="cerrarModalRegistrosBtn" class="btn secondary" style="margin-top:10px;">Cerrar</button>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    // Cambiar pantalla
+    function continuar() {
+        const lider = document.getElementById("lider").value.trim();
+        if (!lider) return alert("Debe ingresar el nombre del líder.");
+
+        localStorage.setItem("liderActivo", lider);
+
+        document.getElementById("ingresoLider").classList.add("hidden");
+        document.getElementById("formularioDatos").classList.remove("hidden");
+        document.getElementById("liderNombre").innerText = lider;
+    }
+
+    // Validar fecha
+    function validarFechaISO(f) {
+        if (!f) return { ok:false, msg:"Seleccione fecha" };
+        const p = f.split("-");
+        if (p.length !== 3) return { ok:false, msg:"Fecha inválida" };
+        return { ok:true, day:p[2], month:p[1], year:p[0] };
+    }
+
+    // Guardar registro
+    function guardarRegistro() {
+        const f = validarFechaISO(document.getElementById("fechaExpedicion").value);
+        const err = document.getElementById("errorFecha");
+
+        if (!f.ok) {
+            err.style.display = "block";
+            err.innerText = f.msg;
+            return;
+        }
+        err.style.display = "none";
+
+        const registro = {
+            lider: localStorage.getItem("liderActivo"),
+            nombres: document.getElementById("nombres").value.trim(),
+            apellidos: document.getElementById("apellidos").value.trim(),
+            cedula: document.getElementById("cedula").value.trim(),
+            fecha_expedicion: `${f.day}/${f.month}/${f.year}`,
+            telefono: document.getElementById("telefono").value.trim(),
+            direccion: document.getElementById("direccion").value.trim(),
+            barrio: document.getElementById("barrio").value.trim(),
+            municipio: document.getElementById("municipio").value.trim()
+        };
+
+        const lista = JSON.parse(localStorage.getItem("registros")) || [];
+        lista.push(registro);
+        localStorage.setItem("registros", JSON.stringify(lista));
+
+        ["nombres","apellidos","cedula","fechaExpedicion","telefono","direccion","barrio","municipio"]
+            .forEach(id => document.getElementById(id).value = "");
+
+        document.getElementById("modalExito").classList.remove("hidden");
+    }
+
+    function nuevoRegistro() {
+        document.getElementById("modalExito").classList.add("hidden");
+    }
+
+    function verRegistros() {
+        const cont = document.getElementById("listaRegistros");
+        const registros = JSON.parse(localStorage.getItem("registros")) || [];
+        let html = "";
+
+        registros.forEach((r, i) => {
+            html += `
+            <div class="records-card">
+                <strong>Registro ${i+1}</strong><br>
+                <strong>Líder:</strong> ${r.lider}<br>
+                <strong>Nombres:</strong> ${r.nombres}<br>
+                <strong>Apellidos:</strong> ${r.apellidos}<br>
+                <strong>Cédula:</strong> ${r.cedula}<br>
+                <strong>Fecha Exp.:</strong> ${r.fecha_expedicion}<br>
+                <strong>Teléfono:</strong> ${r.telefono}<br>
+                <strong>Dirección:</strong> ${r.direccion}<br>
+                <strong>Barrio:</strong> ${r.barrio}<br>
+                <strong>Municipio:</strong> ${r.municipio}
+            </div>`;
+        });
+
+        cont.innerHTML = html;
+        document.getElementById("modalExito").classList.add("hidden");
+        document.getElementById("modalRegistros").classList.remove("hidden");
+    }
+
+    // ------------------------------------------------------
+    // PDF REAL
+    // ------------------------------------------------------
+    async function exportarPDF() {
+        const lider = document.getElementById("liderExport").value.trim();
+        if (!lider) return alert("Ingrese el nombre del líder.");
+
+        const registros = JSON.parse(localStorage.getItem("registros")) || [];
+        const filtrados = registros.filter(r => r.lider === lider);
+
+        if (filtrados.length === 0)
+            return alert("Este líder no tiene registros.");
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF();
+
+        pdf.setFontSize(20);
+        pdf.text("Registros", 105, 15, { align: "center" });
+
+        pdf.setFontSize(14);
+        pdf.text(`Líder: ${lider}`, 20, 30);
+
+        let y = 45;
+
+        filtrados.forEach((r, i) => {
+            pdf.setFontSize(12);
+            pdf.text(`Registro ${i+1}`, 20, y);
+            y += 7;
+
+            pdf.text(`Nombres: ${r.nombres}`, 20, y); y += 6;
+            pdf.text(`Apellidos: ${r.apellidos}`, 20, y); y += 6;
+            pdf.text(`Cédula: ${r.cedula}`, 20, y); y += 6;
+            pdf.text(`Fecha Exp.: ${r.fecha_expedicion}`, 20, y); y += 6;
+            pdf.text(`Teléfono: ${r.telefono}`, 20, y); y += 6;
+            pdf.text(`Dirección: ${r.direccion}`, 20, y); y += 6;
+            pdf.text(`Barrio: ${r.barrio}`, 20, y); y += 6;
+            pdf.text(`Municipio: ${r.municipio}`, 20, y); y += 8;
+
+            pdf.line(20, y, 190, y);
+            y += 10;
+
+            if (y > 270) { pdf.addPage(); y = 20; }
+        });
+
+        pdf.save("registros.pdf");
+    }
+
+    // ------------------------------------------------------
+    // LIMPIAR TODOS LOS REGISTROS
+    // ------------------------------------------------------
+    function limpiarRegistros() {
+        if (!confirm("¿Seguro que quieres borrar TODOS los registros?")) return;
+
+        localStorage.removeItem("registros");
+        localStorage.removeItem("liderActivo");
+
+        document.getElementById("lider").value = "";
+        document.getElementById("liderExport").value = "";
+
+        alert("Registros eliminados.");
+    }
+
+    // Regresar al menú
+    function regresarMenuPrincipal() {
+        document.getElementById("formularioDatos").classList.add("hidden");
+        document.getElementById("ingresoLider").classList.remove("hidden");
+
+        document.getElementById("liderNombre").innerText = "";
+        document.getElementById("lider").value = "";
+
+        localStorage.removeItem("liderActivo");
+    }
+
+    // EVENTOS
+    document.getElementById("btnContinuar").addEventListener("click", continuar);
+    document.getElementById("btnGuardar").addEventListener("click", guardarRegistro);
+    document.getElementById("optNuevo").addEventListener("click", nuevoRegistro);
+    document.getElementById("optVer").addEventListener("click", verRegistros);
+    document.getElementById("optFinalizar").addEventListener("click", regresarMenuPrincipal);
+    document.getElementById("cerrarModalRegistrosBtn").addEventListener("click", () => {
+        document.getElementById("modalRegistros").classList.add("hidden");
+    });
+    document.getElementById("btnRegresar").addEventListener("click", regresarMenuPrincipal);
+    document.getElementById("btnExportarPDF").addEventListener("click", exportarPDF);
+
+    // NUEVO BOTÓN
+    document.getElementById("btnLimpiarRegistros").addEventListener("click", limpiarRegistros);
+
+});
+</script>
+
+</body>
+</html>
